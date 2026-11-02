@@ -153,7 +153,7 @@ const entryCard = (e, now) => `<article class="card entry-card">
     <footer class="entry-foot">${agentLink(e.author)}${e.subject ? `<span class="muted">vouches for</span>${agentLink(e.subject)}` : ""}${e.price ? `<span class="price">${esc(e.price.tari)} tTARI <small>/ ${esc(e.price.unit)}</small></span>` : ""}</footer>
   </article>`;
 
-const LOBBY = "https://ootle-lobby-preview.vercel.app";
+const LOBBY = "https://lobby.tari.com";
 const LOBBY_REPO = "https://github.com/marguerite347/ootle-lobby-community";
 const PROJECT_CATEGORIES = [["", "All"], ["ootle-app", "Ootle apps"], ["community", "Community"], ["contest-entry", "Contest entries"]];
 

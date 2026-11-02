@@ -4,7 +4,7 @@
     {
       "id": "ootle-lobby",
       "name": "Ootle Lobby",
-      "url": "https://ootle-lobby-preview.vercel.app",
+      "url": "https://lobby.tari.com",
       "kind": "ootle-lobby",
       "repo": "marguerite347/ootle-lobby-community",
       "note": "Community-curated Ootle projects, contests and resources. Mirrored listing by listing from its public GitHub repo."

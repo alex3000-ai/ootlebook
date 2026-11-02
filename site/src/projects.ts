@@ -6,7 +6,9 @@ import { clampInt, Ctx, decodeCursor, encodeCursor, Env, getState, HttpError, is
 
 export const LOBBY_REPO = "marguerite347/ootle-lobby-community";
 const BRANCH = "main";
-export const LOBBY_URL = "https://ootle-lobby-preview.vercel.app";
+export const LOBBY_URL = "https://lobby.tari.com";
+// Its first address; older listings still point their media there.
+const LOBBY_OLD_URL = "https://ootle-lobby-preview.vercel.app";
 const RAW = `https://raw.githubusercontent.com/${LOBBY_REPO}/${BRANCH}/`;
 const PREVIEWS = `${RAW}creator-hub/hub/data/seed/previews/`;
 const MAX_FETCH_PER_RUN = 30; // with the sources and link checks, stays under the Workers subrequest limit; the rest carries over
@@ -42,8 +44,8 @@ function safeUrl(u: unknown): string | null {
 // Preview media lives in the repo; serve it from GitHub rather than hotlinking the Lobby site.
 function mediaUrl(u: unknown): string | null {
   if (typeof u !== "string") return null;
-  const rel = u.startsWith("/previews/") ? u.slice("/previews/".length)
-    : u.startsWith(`${LOBBY_URL}/previews/`) ? u.slice(`${LOBBY_URL}/previews/`.length) : null;
+  const prefix = ["", LOBBY_URL, LOBBY_OLD_URL].map((host) => `${host}/previews/`).find((p) => u.startsWith(p));
+  const rel = prefix === undefined ? null : u.slice(prefix.length);
   if (rel !== null) return /^[\w./-]+$/.test(rel) && !rel.includes("..") ? PREVIEWS + rel : null;
   return safeUrl(u);
 }

@@ -49,7 +49,7 @@ const slug = "clew";
 const detail = await call("GET", `/api/v1/projects/${slug}`);
 const p = detail.data.project;
 check(p.title === "Clew" && p.creator && p.summary.length > 50, "detail has full upstream summary + creator");
-check(p.links.human_page.startsWith("https://ootle-lobby-preview.vercel.app") && p.links.repo.startsWith("https://github.com/"), "links: Lobby human page + repo");
+check(p.links.human_page.startsWith("https://lobby.tari.com") && p.links.repo.startsWith("https://github.com/"), "links: Lobby human page + repo");
 check(p.attribution.source_file.includes("content/community-projects/clew.json") && p.attribution.suggest_correction.includes("/edit/"), "attribution + upstream edit link");
 check(p.media.image.startsWith("https://raw.githubusercontent.com/marguerite347/ootle-lobby-community/"), "preview media served from GitHub, not the Lobby site");
 const img = await fetch(p.media.image);
