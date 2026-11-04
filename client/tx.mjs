@@ -75,10 +75,10 @@ function unsigned({ feeAccount, maxFee, instructions, inputs, dryRun, network, m
       inputs: inputs.map((i) => (typeof i === "string" ? { substate_id: i, is_write: false, version: null } : { substate_id: i.id, is_write: i.write === true, version: null })),
       min_epoch: null,
       max_epoch: maxEpoch,
-      blob_hashes: [],
-      blob_sizes: [],
+      // Ootle ≥ 0.48: the seal signer acts as the transaction's signer; no blobs.
+      main_signer: "SealSigner",
       dry_run: dryRun,
-      is_seal_signer_authorized: true,
+      blobs: [],
       nonce: Number(BigInt.asUintN(53, BigInt("0x" + hex(crypto.getRandomValues(new Uint8Array(8)))))),
     },
   };
@@ -164,9 +164,8 @@ export function walletd() {
 
 /** A walletd account's component, public key and key index (the index seals its transactions). */
 export async function accountInfo(rpc, name) {
-  const { accounts } = await rpc("accounts.list", { offset: 0, limit: 100 });
-  const a = accounts.find((x) => x.account.name === name);
-  if (!a) throw new Error(`no walletd account named "${name}"`);
+  // accounts.get, not accounts.list: an API key scoped to this one account may read it but not list the others.
+  const a = await rpc("accounts.get", { name_or_address: { Name: name } });
   const index = a.account.owner_key_id?.Derived?.index;
   if (index === undefined) throw new Error(`account "${name}" has no derived key index`);
   return { component: a.account.component_address, key: a.account.owner_public_key, index };
