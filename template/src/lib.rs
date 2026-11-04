@@ -543,7 +543,7 @@ mod ootlebook {
             assert!(spent_cum > state.claimed, "voucher does not exceed the amount already claimed");
             assert!(spent_cum <= state.deposited, "voucher exceeds the lane's escrow");
             let message = voucher_message(&CallerContext::current_component_address(), &lane, spent_cum);
-            assert!(SignatureVerifier::with_domain(VOUCHER_DOMAIN).verify(&PublicKey::Ristretto25519(info.voucher_key), &message, &voucher), "invalid voucher signature");
+            assert!(SignatureVerifier::with_domain(VOUCHER_DOMAIN).with_scope(SignatureScope::CurrentComponent).verify(&PublicKey::Ristretto25519(info.voucher_key), &message, &voucher), "invalid voucher signature");
             let payout = spent_cum.checked_sub(state.claimed).expect("checked above");
             state.claimed = spent_cum;
             self.save_lane(&lane, state, "agents.lane_claimed");
@@ -734,5 +734,6 @@ mod ootlebook {
 }
 
 fn owner_signed(key: &RistrettoPublicKeyBytes, message: &[u8], signature: &SignaturePayload) -> bool {
-    SignatureVerifier::with_domain(OWNER_DOMAIN).verify(&PublicKey::Ristretto25519(*key), message, signature)
+    // Bound to this component (and, by the engine, to the network), so a statement is good for this Ootlebook only.
+    SignatureVerifier::with_domain(OWNER_DOMAIN).with_scope(SignatureScope::CurrentComponent).verify(&PublicKey::Ristretto25519(*key), message, signature)
 }

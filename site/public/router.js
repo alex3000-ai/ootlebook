@@ -179,7 +179,7 @@ export default function routerView(app, { esc }) {
       const st = await laneStatus();
       const cum = Math.max(st.voucher_cum, st.charged + st.held + info.reserve_microtari);
       if (cum > limit) throw new Error(`This task needs a voucher for ${tari(cum)} in all, above the ${tari(limit)} in your lane. Fund the lane and raise "Escrowed".`);
-      const voucher = signVoucher(st0.voucherSecret, info.component, lane, cum);
+      const voucher = signVoucher(st0.voucherSecret, info.component, lane, cum, info.network);
       const r = await call("/v1/responses", {
         method: "POST",
         headers: { "x-ootle-voucher": JSON.stringify(voucher) },

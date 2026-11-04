@@ -11,7 +11,8 @@ use tari_engine_types::{
     indexed_value::IndexedValue,
     virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
-use tari_ootle_common_types::RistrettoSchnorrBlake2bVerifier;
+use ootle_network::Network;
+use tari_ootle_common_types::{sign_template_message_schnorr, TemplateSignatureBinding};
 use tari_ootle_transaction::{args, builder::named_args::NamedArg, Transaction};
 use tari_template_lib_types::{
     constants::TARI_TOKEN,
@@ -33,10 +34,9 @@ fn new_key() -> RistrettoSecretKey {
     RistrettoSecretKey::random(&mut rand::rng())
 }
 
-fn schnorr(domain: &[u8], key: &RistrettoSecretKey, message: &[u8]) -> SignaturePayload {
-    let (nonce, public_nonce) = RistrettoPublicKey::random_keypair(&mut rand::rng());
-    let challenge = RistrettoSchnorrBlake2bVerifier::compute_challenge(domain, message, &pk(key), &public_nonce.to_byte_type());
-    SignaturePayload::RistrettoSchnorrBlake2b(RistrettoSchnorr::sign_raw_uniform(key, nonce, &challenge).expect("sign").to_byte_type())
+/// A signature as the engine verifies it for component `hub` (the test engine runs as LocalNet).
+fn schnorr(hub: &ComponentAddress, domain: &[u8], key: &RistrettoSecretKey, message: &[u8]) -> SignaturePayload {
+    SignaturePayload::RistrettoSchnorrBlake2b(sign_template_message_schnorr(key, &TemplateSignatureBinding::component(Network::LocalNet, *hub), domain, message))
 }
 
 struct Agent {
@@ -77,7 +77,7 @@ impl Hub {
     /// A registered agent, owned by its own fresh owner key.
     fn agent(&mut self, name: &str) -> Agent {
         let a = self.party(name);
-        let sig = schnorr(OWNER_DOMAIN, &a.owner, &register_message(&self.hub, name, &pk(&a.key), "otl_esm_example"));
+        let sig = schnorr(&self.hub, OWNER_DOMAIN, &a.owner, &register_message(&self.hub, name, &pk(&a.key), "otl_esm_example"));
         let tx = self.register_tx(&a, pk(&a.owner), sig, NAME_FEE);
         self.ok(tx, &a);
         a
@@ -137,7 +137,7 @@ impl Hub {
         // The new key comes with an account to sign from.
         let (account, proof, new) = self.test.create_funded_account();
         let nonce = self.card(&a.name).nonce;
-        let sig = schnorr(OWNER_DOMAIN, &a.owner, &rotate_message(&self.hub, &a.name, nonce, &pk(&new)));
+        let sig = schnorr(&self.hub, OWNER_DOMAIN, &a.owner, &rotate_message(&self.hub, &a.name, nonce, &pk(&new)));
         let tx = self.signed(&self.reader, "rotate_agent_key", args![a.name.as_str(), pk(&new), sig]);
         self.test.execute_expect_success(tx, vec![self.reader.proof.clone()]);
         (a.account, a.proof, a.key) = (account, proof, new);
@@ -145,7 +145,7 @@ impl Hub {
 
     fn retire(&mut self, a: &Agent) {
         let nonce = self.card(&a.name).nonce;
-        let sig = schnorr(OWNER_DOMAIN, &a.owner, &retire_message(&self.hub, &a.name, nonce));
+        let sig = schnorr(&self.hub, OWNER_DOMAIN, &a.owner, &retire_message(&self.hub, &a.name, nonce));
         let tx = self.signed(&self.reader, "retire", args![a.name.as_str(), sig]);
         self.test.execute_expect_success(tx, vec![self.reader.proof.clone()]);
     }
@@ -185,7 +185,7 @@ impl Hub {
     }
 
     fn voucher(&self, key: &RistrettoSecretKey, lane: &str, spent: u64) -> SignaturePayload {
-        schnorr(VOUCHER_DOMAIN, key, &voucher_message(&self.hub, lane, spent.into()))
+        schnorr(&self.hub, VOUCHER_DOMAIN, key, &voucher_message(&self.hub, lane, spent.into()))
     }
 
     fn claim_tx(&self, a: &Agent, lane: &str, spent: u64, voucher: SignaturePayload) -> Transaction {
@@ -241,29 +241,29 @@ fn registration_needs_a_unique_valid_name_the_exact_fee_and_the_owners_signature
     let mut h = Hub::deploy();
     h.agent("alice");
     let twin = h.party("alice");
-    let sig = schnorr(OWNER_DOMAIN, &twin.owner, &register_message(&h.hub, "alice", &pk(&twin.key), "otl_esm_example"));
+    let sig = schnorr(&h.hub, OWNER_DOMAIN, &twin.owner, &register_message(&h.hub, "alice", &pk(&twin.key), "otl_esm_example"));
     let tx = h.register_tx(&twin, pk(&twin.owner), sig, NAME_FEE);
     h.fails(tx, &twin, "");
 
     for bad in ["A", "Alice", "-x", "has space", &"x".repeat(33)] {
         let p = h.party(bad);
-        let sig = schnorr(OWNER_DOMAIN, &p.owner, &register_message(&h.hub, bad, &pk(&p.key), "otl_esm_example"));
+        let sig = schnorr(&h.hub, OWNER_DOMAIN, &p.owner, &register_message(&h.hub, bad, &pk(&p.key), "otl_esm_example"));
         let tx = h.register_tx(&p, pk(&p.owner), sig, NAME_FEE);
         h.fails(tx, &p, "invalid name");
     }
     let bob = h.party("bob");
-    let sig = schnorr(OWNER_DOMAIN, &bob.owner, &register_message(&h.hub, "bob", &pk(&bob.key), "otl_esm_example"));
+    let sig = schnorr(&h.hub, OWNER_DOMAIN, &bob.owner, &register_message(&h.hub, "bob", &pk(&bob.key), "otl_esm_example"));
     let tx = h.register_tx(&bob, pk(&bob.owner), sig.clone(), NAME_FEE - 1);
     h.fails(tx, &bob, "fee must be exact");
     // Signed for a different agent key, or by someone other than the named owner.
-    let wrong = schnorr(OWNER_DOMAIN, &bob.owner, &register_message(&h.hub, "bob", &pk(&new_key()), "otl_esm_example"));
+    let wrong = schnorr(&h.hub, OWNER_DOMAIN, &bob.owner, &register_message(&h.hub, "bob", &pk(&new_key()), "otl_esm_example"));
     let tx = h.register_tx(&bob, pk(&bob.owner), wrong, NAME_FEE);
     h.fails(tx, &bob, "invalid owner signature");
     let tx = h.register_tx(&bob, pk(&new_key()), sig, NAME_FEE);
     h.fails(tx, &bob, "invalid owner signature");
     // An agent may own itself.
     let carol = h.party("carol");
-    let sig = schnorr(OWNER_DOMAIN, &carol.key, &register_message(&h.hub, "carol", &pk(&carol.key), "otl_esm_example"));
+    let sig = schnorr(&h.hub, OWNER_DOMAIN, &carol.key, &register_message(&h.hub, "carol", &pk(&carol.key), "otl_esm_example"));
     let tx = h.register_tx(&carol, pk(&carol.key), sig, NAME_FEE);
     h.ok(tx, &carol);
     assert_eq!(h.read("resources", args![]).decoded::<(ResourceAddress, ResourceAddress, ResourceAddress, ResourceAddress, ResourceAddress, ResourceAddress, u64)>().unwrap().6, 2);
@@ -284,14 +284,14 @@ fn only_the_agent_key_edits_and_only_owner_statements_rotate_retire_or_transfer(
     let stale = Agent { name: "alice".into(), account: h.reader.account, proof: h.reader.proof.clone(), key: old, owner: new_key() };
     h.call_fails(&stale, "set_messaging_address", args!["alice", ""], "only the agent's current key");
     h.call(&alice, "set_messaging_address", args!["alice", ""]);
-    let sig = schnorr(OWNER_DOMAIN, &alice.owner, &rotate_message(&h.hub, "alice", 0, &pk(&new_key())));
+    let sig = schnorr(&h.hub, OWNER_DOMAIN, &alice.owner, &rotate_message(&h.hub, "alice", 0, &pk(&new_key())));
     h.call_fails(&bob, "rotate_agent_key", args!["alice", pk(&new_key()), sig], "invalid owner signature");
 
     // A transfer needs both owners.
     let next = new_key();
     let nonce = h.card("alice").nonce;
     let message = transfer_message(&h.hub, "alice", nonce, &pk(&next));
-    let both = (schnorr(OWNER_DOMAIN, &alice.owner, &message), schnorr(OWNER_DOMAIN, &next, &message));
+    let both = (schnorr(&h.hub, OWNER_DOMAIN, &alice.owner, &message), schnorr(&h.hub, OWNER_DOMAIN, &next, &message));
     h.call_fails(&bob, "transfer_owner", args!["alice", pk(&next), both.0.clone(), both.0.clone()], "invalid new owner signature");
     h.call(&bob, "transfer_owner", args!["alice", pk(&next), both.0, both.1]);
     assert_eq!(h.card("alice").owner_key, pk(&next));
@@ -302,7 +302,7 @@ fn only_the_agent_key_edits_and_only_owner_statements_rotate_retire_or_transfer(
     assert!(h.card("alice").retired);
     h.call_fails(&alice, "set_description", args!["alice", "back"], "agent is retired");
     let nonce = h.card("alice").nonce;
-    let sig = schnorr(OWNER_DOMAIN, &alice.owner, &retire_message(&h.hub, "alice", nonce));
+    let sig = schnorr(&h.hub, OWNER_DOMAIN, &alice.owner, &retire_message(&h.hub, "alice", nonce));
     h.call_fails(&bob, "retire", args!["alice", sig], "agent is retired");
 }
 
@@ -313,12 +313,12 @@ fn signatures_from_the_javascript_client_are_accepted() {
     let owner = new_key();
     let message = register_message(&h.hub, "jsagent", &pk(&a.key), "otl_esm_example");
     let script = "import { sign } from './client/keys.mjs'; \
-        const [domain, key, msg] = process.argv.slice(1); \
-        const s = sign(domain, key, Buffer.from(msg, 'hex')); process.stdout.write(s.public_nonce + ' ' + s.signature);";
+        const [domain, key, msg, hub] = process.argv.slice(1); \
+        const s = sign(domain, key, Buffer.from(msg, 'hex'), { network: 'localnet', hub }); process.stdout.write(s.public_nonce + ' ' + s.signature);";
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
     let out = std::process::Command::new("node")
         .current_dir(root)
-        .args(["--input-type=module", "-e", script, "ootlebook-owner-v1", &owner.to_hex(), &message.to_hex()])
+        .args(["--input-type=module", "-e", script, "ootlebook-owner-v1", &owner.to_hex(), &message.to_hex(), &h.hub.to_string()])
         .output()
         .expect("run node (install Node.js and `npm install` in client/)");
     assert!(out.status.success(), "node failed: {}", String::from_utf8_lossy(&out.stderr));

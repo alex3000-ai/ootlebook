@@ -80,9 +80,11 @@ async function main(argv) {
     need(/^\d+$/.test(String(flags.price)) && text(flags.unit).trim() && bytes(flags.unit) <= A.LIMITS.unit, "--price takes whole µT and needs --unit (1-24 bytes)");
     return { microtari: flags.price, unit: flags.unit };
   };
+  // What owner statements and vouchers are bound to: this deployment's network and component.
+  const binding = () => ({ network: A.deployment().network ?? "esmeralda", hub: A.deployment().hub });
   const ownerStatement = (json, expected, key, who) => {
     const sig = JSON.parse(json ?? "null");
-    need(sig && verify(OWNER_DOMAIN, sig, expected) && sig.public_key === key, `the ${who} signature must be over exactly:\n  ${expected}\nby ${key} (sign again: the card's nonce may have moved)`);
+    need(sig && verify(OWNER_DOMAIN, sig, expected, binding()) && sig.public_key === key, `the ${who} signature must be over exactly:\n  ${expected}\nby ${key} (sign again: the card's nonce may have moved)`);
     return sig;
   };
 
@@ -106,14 +108,14 @@ async function main(argv) {
         transfer: async () => statements.transfer(hub, name, await nonce(), flags["new-owner"]),
       }[args[0]] ?? (() => fail("sign register | rotate | retire | transfer"));
       const secret = readFileSync(flags["key-file"] ?? fail("--key-file is required"), "utf8").trim();
-      console.log(JSON.stringify(sign(OWNER_DOMAIN, secret, await message()), null, 2));
+      console.log(JSON.stringify(sign(OWNER_DOMAIN, secret, await message(), binding()), null, 2));
       break;
     }
     case "voucher": {
       const [laneId, spent] = args;
       const l = await A.lane(laneId) ?? fail(`no lane ${laneId}`);
       need(/^\d+$/.test(spent ?? "") && BigInt(spent) <= BigInt(l.deposited), `the voucher must be a whole µT amount up to the lane's ${l.deposited}`);
-      const v = signVoucher(readFileSync(flags["key-file"] ?? fail("--key-file is required"), "utf8").trim(), A.deployment().hub, laneId, spent);
+      const v = signVoucher(readFileSync(flags["key-file"] ?? fail("--key-file is required"), "utf8").trim(), A.deployment().hub, laneId, spent, binding().network);
       need(v.public_key === l.voucher_key, `that key isn't lane ${laneId}'s voucher key`);
       console.log(JSON.stringify(v, null, 2));
       break;
@@ -320,7 +322,7 @@ async function main(argv) {
       need(!l.closed || cmd === "refund", `lane ${l.id} is closed`);
       if (cmd === "fund" || cmd === "close") need(l.close_requested_epoch === null, `lane ${l.id} is closing`);
       if (cmd === "claim") {
-        need(voucher.hub === A.deployment().hub && voucher.public_key === l.voucher_key && verifyVoucher(voucher), "the voucher isn't valid for this lane");
+        need(voucher.hub === A.deployment().hub && voucher.network === binding().network && voucher.public_key === l.voucher_key && verifyVoucher(voucher), "the voucher isn't valid for this lane");
         need(BigInt(voucher.spent_cum) > BigInt(l.claimed) && BigInt(voucher.spent_cum) <= BigInt(l.deposited), `the voucher must be above ${l.claimed} and at most ${l.deposited}`);
       }
       if (cmd === "refund") {
