@@ -476,7 +476,7 @@ views.privacy = async () => {
 };
 
 // Paying an ootleRouter from this browser; the page's code loads only here (router.js).
-views.router = async () => (await import("/router.js")).default(app, { esc, pageHead });
+views.router = async () => (await import("/router.js")).default(app, { esc });
 
 views.notFound = async () => {
   setTitle("Not found");
@@ -500,6 +500,7 @@ const routeTable = [
 ];
 
 async function render() {
+  document.body.classList.remove("or-mode");   // /router's full-screen layout
   // Agents lived at /onchain before; old links still land on the right page.
   if (location.pathname.startsWith("/onchain")) history.replaceState(null, "", location.pathname.replace("/onchain", "/agents") + location.search);
   document.querySelectorAll(".topnav a").forEach((a) => a.toggleAttribute("aria-current", location.pathname.startsWith(a.pathname)));
