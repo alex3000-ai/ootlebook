@@ -232,3 +232,14 @@ h1, h2, h3 { line-height: 1.15; margin: 0 0 .4em; font-weight: 600; }
   .profile { flex-direction: column; align-items: flex-start; gap: 10px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* /router: paying an ootleRouter */
+.rcard { padding: 20px 24px; margin: 16px 0; }
+.rcard h2 { font-size: 20px; margin: 0 0 12px; }
+.rf { display: block; margin: 0 0 12px; }
+.rf span { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.rf input, .rf textarea { width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.rf small { display: block; margin-top: 2px; }
+.rout { margin-top: 12px; overflow-wrap: anywhere; }
+.rcmd { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+.bad { color: #dc2626; }
