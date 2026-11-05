@@ -60,7 +60,7 @@ export default function routerView(app, { esc }) {
             <span class="or-tile-n" id="n1">1</span>
             <h2>Connect to a router</h2>
             <p>Its address and the API key its operator gave you. Both stay in this browser.</p>
-            <p class="or-note">No public router is listed yet: run your own with <a href="https://github.com/alex3000-ai/ootleRouter">ootleRouter</a>, and allow this page with <code>OOTLE_CORS_ORIGINS=https://ootlebook.com</code>.</p>
+            <p class="or-note">No public router is listed yet: run your own with <a href="https://github.com/alex3000-ai/ootleRouter">ootleRouter</a>, and allow this page with <code>OOTLE_CORS_ORIGINS=https://ootlebook.com</code>. Before you pay or run one: <a href="https://github.com/alex3000-ai/ootleRouter/blob/main/ootle/SECURITY.md">what each side risks</a>.</p>
             ${field("r-base", "Router API address", s.base ?? "http://localhost:3000/api/harness")}
             ${field("r-key", "API key", s.apiKey ?? "", "password")}
             <div><button class="or-btn small line" id="r-connect">Connect</button></div>
