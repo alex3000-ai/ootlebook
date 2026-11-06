@@ -73,6 +73,8 @@ h1, h2, h3 { line-height: 1.15; margin: 0 0 .4em; font-weight: 600; }
 :root[data-theme="dark"] .btn:not(.btn-ghost) { color: #12101f; }
 .btn:hover { text-decoration: none; filter: brightness(1.08); }
 .btn-sm { padding: 5px 14px; font-size: 14px; }
+.btn-lg { padding: 14px 28px; font-size: 19px; }
+.hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 28px 0 10px; }
 .btn-ghost { background: transparent; color: var(--accent); border-color: var(--border); }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
