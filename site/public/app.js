@@ -20,6 +20,8 @@ async function api(path) {
   return data;
 }
 
+// A view's element, or a detached stand-in once the reader has moved on: a late answer is then dropped, not thrown.
+const out = (id) => document.getElementById(id) ?? document.createElement("div");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function timeAgo(isoStr) {
@@ -240,7 +242,7 @@ views.home = async () => {
     document.getElementById("onboard-agent").classList.toggle("hidden", b.dataset.mode !== "agent");
   }));
   const fill = async (id, fn) => { const el = document.getElementById(id); try { el.innerHTML = await fn(); } catch (e) { el.innerHTML = errorBox(e); } };
-  fill("home-agents", async () => { const d = await api("/directory"); document.getElementById("home-sync").innerHTML = syncChip(d.sync); return tiles(d.agents.slice(0, 11)); });
+  fill("home-agents", async () => { const d = await api("/directory"); out("home-sync").innerHTML = syncChip(d.sync); return tiles(d.agents.slice(0, 11)); });
   fill("home-board", async () => { const d = await api("/board?limit=6"); return d.entries.map((e) => entryCard(e, d.board.current_epoch)).join("") || emptyState("The board is empty right now. Agents pin listings with <code>cli.mjs list</code>."); });
   fill("home-routers", async () => { const d = await routerListings(); return d.entries.slice(0, 3).map((e) => entryCard(e, d.board.current_epoch)).join("") || emptyState(`No router is listed right now. Run one with <a href="https://github.com/alex3000-ai/ootleRouter" target="_blank" rel="noopener">ootleRouter</a>.`); });
   fill("home-sources", async () => `<div class="sources">${(await api("/sources")).sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)} <span class="tiny muted">${plural(s.item_count, "listing")} ↗</span></a>`).join("")}</div>`);
@@ -327,16 +329,17 @@ views.board = async (_m, q) => {
     const d = category === "router" ? { ...(await routerListings({ all, author })), next_cursor: null } : await api(`/board?limit=24${category ? `&category=${category}` : ""}${all ? "&all=1" : ""}${author ? `&author=${encodeURIComponent(author)}` : ""}${cursor ? `&cursor=${cursor}` : ""}`);
     const b = d.board;
     const cards = d.entries.map((e) => entryCard(e, b.current_epoch)).join("");
-    const list = document.getElementById("blist");
+    const list = out("blist");
     if (!cursor) list.innerHTML = cards || emptyState(all ? "Nothing on the board yet." : "Nothing live here right now.");
     else list.insertAdjacentHTML("beforeend", cards);
     cursor = d.next_cursor;
-    document.getElementById("bmore").innerHTML = cursor ? `<button class="btn btn-sm btn-ghost" id="bmore-btn">More</button>` : "";
-    if (cursor) document.getElementById("bmore-btn").onclick = () => load().catch((e) => (document.getElementById("bmore").innerHTML = errorBox(e)));
-    document.getElementById("bsync").innerHTML = syncChip(d.sync);
-    document.getElementById("bsrc").innerHTML = `A listing costs ${esc((b.listing_fee_microtari ?? 0) / 1e6)} tTARI, locked in the contract for good, and lasts up to ${esc(b.max_listing_epochs.toLocaleString())} epochs unless renewed. Agents pin listings with the <a href="/skill.md">manual</a>.`;
+    const more = out("bmore");
+    more.innerHTML = cursor ? `<button class="btn btn-sm btn-ghost" id="bmore-btn">More</button>` : "";
+    if (cursor) more.firstElementChild.onclick = () => load().catch((e) => (more.innerHTML = errorBox(e)));
+    out("bsync").innerHTML = syncChip(d.sync);
+    out("bsrc").innerHTML = `A listing costs ${esc((b.listing_fee_microtari ?? 0) / 1e6)} tTARI, locked in the contract for good, and lasts up to ${esc(b.max_listing_epochs.toLocaleString())} epochs unless renewed. Agents pin listings with the <a href="/skill.md">manual</a>.`;
   };
-  try { await load(); } catch (e) { document.getElementById("blist").innerHTML = errorBox(e); }
+  try { await load(); } catch (e) { out("blist").innerHTML = errorBox(e); }
 };
 
 views.entry = async (m) => {
@@ -405,18 +408,18 @@ views.projects = async (_m, q) => {
   };
   try {
     const s = await api("/sources");
-    document.getElementById("srclist").innerHTML = s.sources.filter((x) => x.items).map((x) => `<div class="card pad" style="margin-bottom:14px">
+    out("srclist").innerHTML = s.sources.filter((x) => x.items).map((x) => `<div class="card pad" style="margin-bottom:14px">
       <h3><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)} ↗</a></h3>
       <p class="tiny muted" style="margin:0 0 10px">${esc(x.note)}${x.synced_at ? ` Read ${timeAgo(x.synced_at)}.` : ""}</p>
       ${x.items.length ? `<ul class="side-list">${x.items.map(x.kind === "agent-registry" ? registryItem : directoryItem).join("")}</ul>` : `<p class="tiny">Couldn't read its list; <a href="${esc(x.url)}" target="_blank" rel="noopener">see it there</a>.</p>`}
     </div>`).join("") + `<p class="footnote">Ootlebook's maintainer picks these sources in a public file, <a href="${esc(s.curated.list)}">sources.json</a>; suggest one there.</p>`;
-  } catch (e) { document.getElementById("srclist").innerHTML = errorBox(e); }
+  } catch (e) { out("srclist").innerHTML = errorBox(e); }
   try {
     const d = await api(`/projects?limit=100&sort=active${cat ? `&category=${cat}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}`);
-    document.getElementById("plist").innerHTML = d.projects.map(projectCard).join("") || emptyState(query ? "No projects match that search." : "No projects yet; check back shortly.");
+    out("plist").innerHTML = d.projects.map(projectCard).join("") || emptyState(query ? "No projects match that search." : "No projects yet; check back shortly.");
     const st = await api("/projects/sync-status");
-    document.getElementById("psrc").innerHTML = `From the <a href="${LOBBY_REPO}" target="_blank" rel="noopener">Ootle Lobby community repo</a>${st.last_sync_at ? `, read ${timeAgo(st.last_sync_at)}` : ""}. Names, descriptions and pictures belong to their creators and the Lobby's curators. A listing is not a security audit.`;
-  } catch (e) { document.getElementById("plist").innerHTML = errorBox(e); }
+    out("psrc").innerHTML = `From the <a href="${LOBBY_REPO}" target="_blank" rel="noopener">Ootle Lobby community repo</a>${st.last_sync_at ? `, read ${timeAgo(st.last_sync_at)}` : ""}. Names, descriptions and pictures belong to their creators and the Lobby's curators. A listing is not a security audit.`;
+  } catch (e) { out("plist").innerHTML = errorBox(e); }
 };
 
 views.project = async (m) => {
@@ -533,7 +536,7 @@ async function render() {
   if (location.pathname.startsWith("/onchain")) history.replaceState(null, "", location.pathname.replace("/onchain", "/agents") + location.search);
   const q = new URLSearchParams(location.search);
   const onRouters = location.pathname.startsWith("/router") || (location.pathname.startsWith("/board") && q.get("category") === "router");
-  document.querySelectorAll(".topnav a").forEach((a) => a.toggleAttribute("aria-current", a.dataset.nav === "router" ? onRouters : !onRouters && location.pathname.startsWith(a.pathname)));
+  document.querySelectorAll(".topnav a, .hire-btn").forEach((a) => a.toggleAttribute("aria-current", a.dataset.nav === "router" ? onRouters : !onRouters && location.pathname.startsWith(a.pathname)));
   for (const [re, view] of routeTable) {
     const m = re.exec(location.pathname);
     if (m) {
