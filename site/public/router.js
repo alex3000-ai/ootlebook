@@ -20,7 +20,7 @@ const ICONS = {
 let cssLoaded = false;
 const ran = [];   // this visit's tasks; not stored
 
-export default function routerView(app, { esc }) {
+export default function routerView(app, { esc, routerListings }) {
   if (!cssLoaded) {
     document.head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="/router.css">`);
     cssLoaded = true;
@@ -61,8 +61,9 @@ export default function routerView(app, { esc }) {
           <div class="or-tile">
             <span class="or-tile-n" id="n1">1</span>
             <h2>Connect to a router</h2>
-            <p>Routers list themselves on the <a href="/board?category=service">board</a> as ootleRouter services, with a Tor address: open this page in Tor Browser. No API key is needed: your first voucher gets you one of your lane's own.</p>
+            <p>Routers list themselves on the <a href="/board?category=router">board</a>, with a Tor address: open this page in Tor Browser. No API key is needed: your first voucher gets you one of your lane's own.</p>
             <p class="or-note">Run one yourself with <a href="https://github.com/alex3000-ai/ootleRouter">ootleRouter</a>. Before you pay or run one: <a href="https://github.com/alex3000-ai/ootleRouter/blob/main/ootle/SECURITY.md">what each side risks</a>.</p>
+            <div id="r-listed"></div>
             ${field("r-base", "Router API address", s.base ?? "http://….onion/api/harness")}
             <div><button class="or-btn small line" id="r-connect">Connect</button></div>
             <div id="r-info"></div>
@@ -216,6 +217,15 @@ export default function routerView(app, { esc }) {
     }
     btn.disabled = false;
   };
+
+  // The routers listed on the board right now: picking one fills in its address and connects.
+  routerListings?.().then(({ entries }) => {
+    if (!$("r-listed")) return;   // left the page meanwhile
+    show("r-listed", entries.length
+      ? `<p class="or-note">Listed now:</p><div class="or-row" style="flex-wrap:wrap">${entries.map((e) => `<button class="or-btn small line" data-base="${esc(e.link)}" title="${esc(e.title)}">${esc(e.author)}</button>`).join("")}</div>`
+      : `<p class="or-note">No router is listed on the board right now. Enter one's address if you have it.</p>`);
+    document.querySelectorAll("#r-listed [data-base]").forEach((b) => (b.onclick = () => { $("r-base").value = b.dataset.base; connect(); }));
+  }).catch(() => {});
 
   showKey();
   if (s.base && !s.base.includes("…")) connect().then(() => (s.lane !== undefined && s.lane !== "" ? laneStatus().catch(() => {}) : null));

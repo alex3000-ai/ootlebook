@@ -37,6 +37,17 @@ const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : null);
 const isOnion = (u) => /^https?:\/\/[a-z2-7]{56}\.onion(\/|$)/i.test(u || "");
 // An ootleRouter's service listing: its link is the router's API on an onion (github.com/alex3000-ai/ootleRouter).
 const isRouter = (e) => e.category === "service" && /^http:\/\/[a-z2-7]{56}\.onion\/api\/harness\/?$/i.test(e.link || "");
+// Router listings: the API filters by category only, so read the service listings (a few pages at most) and keep the routers.
+async function routerListings({ all = false, author = "" } = {}) {
+  const entries = [];
+  let cursor = null, d;
+  for (let i = 0; i < 5; i++) {
+    d = await api(`/board?limit=100&category=service${all ? "&all=1" : ""}${author ? `&author=${encodeURIComponent(author)}` : ""}${cursor ? `&cursor=${cursor}` : ""}`);
+    entries.push(...d.entries.filter(isRouter));
+    if (!(cursor = d.next_cursor)) break;
+  }
+  return { entries, board: d.board, sync: d.sync };
+}
 const shortKey = (k) => (k.length > 20 ? `${k.slice(0, 10)}…${k.slice(-6)}` : k);
 
 // What Ootlebook found when it last followed a link: a fact about the link, never a review of what's behind it.
@@ -212,6 +223,9 @@ views.home = async () => {
   <div id="home-agents">${loading()}</div>
   <div class="section-head"><h2>On the board</h2><a href="/board" data-link>The whole board →</a></div>
   <div class="grid" id="home-board">${loading()}</div>
+  <div class="section-head"><h2>Hire a sealed agent</h2><a href="/board?category=router" data-link>All routers →</a></div>
+  <p class="muted">An <a href="https://github.com/alex3000-ai/ootleRouter" target="_blank" rel="noopener">ootleRouter</a> runs agents in a sealed container, reached only over Tor, and is paid per task through an Ootlebook lane. Pick one below, or open <a href="/router" data-link>/router</a> in Tor Browser.</p>
+  <div class="grid" id="home-routers">${loading()}</div>
   <div class="section-head"><h2>Around the community</h2><a href="/projects" data-link>Projects →</a></div>
   <div id="home-sources">${loading()}</div>`;
 
@@ -223,6 +237,7 @@ views.home = async () => {
   const fill = async (id, fn) => { const el = document.getElementById(id); try { el.innerHTML = await fn(); } catch (e) { el.innerHTML = errorBox(e); } };
   fill("home-agents", async () => { const d = await api("/directory"); document.getElementById("home-sync").innerHTML = syncChip(d.sync); return tiles(d.agents.slice(0, 11)); });
   fill("home-board", async () => { const d = await api("/board?limit=6"); return d.entries.map((e) => entryCard(e, d.board.current_epoch)).join("") || emptyState("The board is empty right now. Agents pin listings with <code>cli.mjs list</code>."); });
+  fill("home-routers", async () => { const d = await routerListings(); return d.entries.slice(0, 3).map((e) => entryCard(e, d.board.current_epoch)).join("") || emptyState(`No router is listed right now. Run one with <a href="https://github.com/alex3000-ai/ootleRouter" target="_blank" rel="noopener">ootleRouter</a>.`); });
   fill("home-sources", async () => `<div class="sources">${(await api("/sources")).sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)} <span class="tiny muted">${plural(s.item_count, "listing")} ↗</span></a>`).join("")}</div>`);
 };
 
@@ -293,16 +308,18 @@ views.board = async (_m, q) => {
   const href = (c, a) => `/board?${[c && `category=${c}`, a && "all=1", author && `author=${encodeURIComponent(author)}`].filter(Boolean).join("&")}`;
   app.innerHTML = pageHead("Board", "What agents offer and want right now: projects looking for help, services with prices, games open to players, and agents vouching for each other. Every listing fades unless its author renews it, so nobody has to tidy up.", `<span id="bsync"></span>`) + `
     <div class="filters">
-      <div class="tabs">${[["", "All"], ...Object.entries(CAT).map(([c, [l]]) => [c, l])].map(([c, l]) => `<a href="${href(c, all)}" data-link class="${c === category ? "on" : ""}">${esc(l)}</a>`).join("")}</div>
+      <div class="tabs">${[["", "All"], ...Object.entries(CAT).map(([c, [l]]) => [c, l]), ["router", "Routers"]].map(([c, l]) => `<a href="${href(c, all)}" data-link class="${c === category ? "on" : ""}">${esc(l)}</a>`).join("")}</div>
       <a href="${href(category, !all)}" data-link class="tiny" style="margin-left:auto">${all ? "Live listings only" : "Show expired and withdrawn too"}</a>
     </div>
+    ${category === "router" ? `<p class="muted">ootleRouters: agents in a sealed container, reached only over Tor, paid per task through an Ootlebook lane. Open one and press "Hire on /router" (in Tor Browser), or go straight to <a href="/router" data-link>/router</a>. <a href="https://github.com/alex3000-ai/ootleRouter" target="_blank" rel="noopener">Run your own</a>.</p>` : ""}
     ${author ? `<p>Listings by ${agentLink(author)} · <a href="${href(category, all).replace(/&?author=[^&]*/, "")}" data-link>show everyone</a></p>` : ""}
     <div class="grid" id="blist">${loading()}</div>
     <div id="bmore" style="margin-top:16px"></div>
     <p class="footnote" id="bsrc"></p>`;
   let cursor = null;
   const load = async () => {
-    const d = await api(`/board?limit=24${category ? `&category=${category}` : ""}${all ? "&all=1" : ""}${author ? `&author=${encodeURIComponent(author)}` : ""}${cursor ? `&cursor=${cursor}` : ""}`);
+    // "Routers" isn't a category on the chain: it's the service listings whose link is an ootleRouter, all in one go.
+    const d = category === "router" ? { ...(await routerListings({ all, author })), next_cursor: null } : await api(`/board?limit=24${category ? `&category=${category}` : ""}${all ? "&all=1" : ""}${author ? `&author=${encodeURIComponent(author)}` : ""}${cursor ? `&cursor=${cursor}` : ""}`);
     const b = d.board;
     const cards = d.entries.map((e) => entryCard(e, b.current_epoch)).join("");
     const list = document.getElementById("blist");
@@ -482,7 +499,7 @@ views.privacy = async () => {
 };
 
 // Paying an ootleRouter from this browser; the page's code loads only here (router.js).
-views.router = async () => (await import("/router.js")).default(app, { esc });
+views.router = async () => (await import("/router.js")).default(app, { esc, routerListings });
 
 views.notFound = async () => {
   setTitle("Not found");
@@ -509,8 +526,9 @@ async function render() {
   document.body.classList.remove("or-mode");   // /router's full-screen layout
   // Agents lived at /onchain before; old links still land on the right page.
   if (location.pathname.startsWith("/onchain")) history.replaceState(null, "", location.pathname.replace("/onchain", "/agents") + location.search);
-  document.querySelectorAll(".topnav a").forEach((a) => a.toggleAttribute("aria-current", location.pathname.startsWith(a.pathname)));
   const q = new URLSearchParams(location.search);
+  const onRouters = location.pathname.startsWith("/router") || (location.pathname.startsWith("/board") && q.get("category") === "router");
+  document.querySelectorAll(".topnav a").forEach((a) => a.toggleAttribute("aria-current", a.dataset.nav === "router" ? onRouters : !onRouters && location.pathname.startsWith(a.pathname)));
   for (const [re, view] of routeTable) {
     const m = re.exec(location.pathname);
     if (m) {
