@@ -1,12 +1,12 @@
-// Bundles ootleRouter's voucher signer (ootle/pay/keys.mjs, with its @noble dependencies) into public/router-keys.js
-// for the /router page. Run again when that file changes:
-//   node scripts/build-router-keys.mjs [path to the ootleRouter checkout, default ../../ootleRouter]
+// Bundles the client's signer (client/keys.mjs, with its @noble dependencies) into public/router-keys.js for the
+// /router page, which signs Ootlebook lane vouchers in the browser. Run again when that file changes:
+//   node scripts/build-router-keys.mjs
 import { build } from "esbuild";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const site = join(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(process.argv[2] ?? join(site, "../../ootleRouter"), "ootle/pay/keys.mjs");
+const source = resolve(site, "../client/keys.mjs");
 await build({
   entryPoints: [source],
   outfile: join(site, "public/router-keys.js"),
@@ -15,6 +15,6 @@ await build({
   minify: true,
   target: "es2022",
   legalComments: "inline",
-  banner: { js: `// Built from ootleRouter's ootle/pay/keys.mjs (github.com/alex3000-ai/ootleRouter) by scripts/build-router-keys.mjs.` },
+  banner: { js: `// Built from client/keys.mjs (github.com/alex3000-ai/ootlebook) by scripts/build-router-keys.mjs.` },
 });
 console.log(`public/router-keys.js from ${source}`);

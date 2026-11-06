@@ -41,7 +41,8 @@ async function check(env: Env, url: string): Promise<{ ok: boolean; status: numb
 const LINKS = `SELECT repo_url AS url FROM projects WHERE removed = 0 AND repo_url IS NOT NULL
   UNION SELECT demo_url FROM projects WHERE removed = 0 AND demo_url IS NOT NULL
   UNION SELECT url FROM source_items WHERE url IS NOT NULL
-  UNION SELECT link FROM listings WHERE link LIKE 'http%' AND withdrawn = 0`;
+  UNION SELECT link FROM listings WHERE link LIKE 'http%' AND withdrawn = 0
+    AND link NOT LIKE '%.onion' AND link NOT LIKE '%.onion/%'`;  // a Worker can't reach Tor addresses
 
 export async function checkLinks(env: Env): Promise<{ checked: number; failed: number }> {
   const due = (await env.DB.prepare(`SELECT l.url FROM (${LINKS}) l LEFT JOIN link_checks c ON c.url = l.url ORDER BY COALESCE(c.checked_at, 0) LIMIT ?`)

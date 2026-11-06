@@ -4,7 +4,6 @@
 // message)) mod l. H is Blake2b-512 under the tag "com.tari.ootle.template_signature.v1.<label>", every input preceded
 // by its length (u64, little-endian). The scope is the Ootlebook component, so a signature is good for it alone.
 
-import { randomBytes } from "node:crypto";
 import { ristretto255 } from "@noble/curves/ed25519.js";
 import { blake2b } from "@noble/hashes/blake2.js";
 
@@ -17,11 +16,12 @@ const TAG = "com.tari.ootle.template_signature.v1";
 const Point = ristretto255.Point;
 const ORDER = Point.Fn.ORDER;
 const enc = new TextEncoder();
-const hex = (b) => Buffer.from(b).toString("hex");
+// Plain bytes and the Web Crypto random source, so the same file runs in Node and in a browser (ootlebook.com/router).
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const fromHex = (h) => {
   const clean = String(h).trim().replace(/^0x/i, "");
   if (!/^([0-9a-fA-F]{2})*$/.test(clean)) throw new Error("invalid hex");
-  return Uint8Array.from(Buffer.from(clean, "hex"));
+  return Uint8Array.from(clean.match(/../g) ?? [], (x) => parseInt(x, 16));
 };
 const leToBigInt = (b) => b.reduceRight((n, byte) => (n << 8n) | BigInt(byte), 0n);
 const le32 = (n) => {
@@ -31,7 +31,7 @@ const le32 = (n) => {
 };
 const randomScalar = () => {
   for (;;) {
-    const k = leToBigInt(randomBytes(64)) % ORDER;
+    const k = leToBigInt(globalThis.crypto.getRandomValues(new Uint8Array(64))) % ORDER;
     if (k !== 0n) return k;
   }
 };

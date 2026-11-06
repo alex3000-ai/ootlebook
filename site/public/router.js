@@ -1,6 +1,6 @@
 // /router: pay an ootleRouter per use from this browser, in a page styled after the router's own console (router.css).
 // The page talks only to the router you name; your API key and voucher key stay in this browser's storage and never
-// reach Ootlebook. Vouchers are signed here (router-keys.js is ootleRouter's ootle/pay/keys.mjs, bundled by
+// reach Ootlebook. Vouchers for Ootlebook's payment lanes are signed here (router-keys.js is client/keys.mjs, bundled by
 // scripts/build-router-keys.mjs).
 
 import { keygen, publicKeyOf, signVoucher } from "/router-keys.js";
@@ -28,6 +28,8 @@ export default function routerView(app, { esc }) {
   document.body.classList.add("or-mode");
   document.title = "Router · Ootlebook";
   const s = load();
+  const fromBoard = new URLSearchParams(location.search).get("base");   // "Hire on /router" from a board listing
+  if (fromBoard && /^http:\/\/[a-z2-7]{56}\.onion\/api\/harness\/?$/i.test(fromBoard)) s.base = fromBoard;
   const field = (id, label, value = "", type = "text", hint = "") =>
     `<label class="or-field"><span>${label}</span><input id="${id}" type="${type}" value="${esc(value)}" autocomplete="off" spellcheck="false">${hint ? `<small>${hint}</small>` : ""}</label>`;
 
@@ -59,19 +61,18 @@ export default function routerView(app, { esc }) {
           <div class="or-tile">
             <span class="or-tile-n" id="n1">1</span>
             <h2>Connect to a router</h2>
-            <p>Its address and the API key its operator gave you. Both stay in this browser.</p>
-            <p class="or-note">No public router is listed yet: run your own with <a href="https://github.com/alex3000-ai/ootleRouter">ootleRouter</a>, and allow this page with <code>OOTLE_CORS_ORIGINS=https://ootlebook.com</code>. Before you pay or run one: <a href="https://github.com/alex3000-ai/ootleRouter/blob/main/ootle/SECURITY.md">what each side risks</a>.</p>
-            ${field("r-base", "Router API address", s.base ?? "http://localhost:3000/api/harness")}
-            ${field("r-key", "API key", s.apiKey ?? "", "password")}
+            <p>Routers list themselves on the <a href="/board?category=service">board</a> as ootleRouter services, with a Tor address: open this page in Tor Browser. No API key is needed: your first voucher gets you one of your lane's own.</p>
+            <p class="or-note">Run one yourself with <a href="https://github.com/alex3000-ai/ootleRouter">ootleRouter</a>. Before you pay or run one: <a href="https://github.com/alex3000-ai/ootleRouter/blob/main/ootle/SECURITY.md">what each side risks</a>.</p>
+            ${field("r-base", "Router API address", s.base ?? "http://….onion/api/harness")}
             <div><button class="or-btn small line" id="r-connect">Connect</button></div>
             <div id="r-info"></div>
           </div>
           <div class="or-tile">
             <span class="or-tile-n" id="n2">2</span>
             <h2>Open a payment lane</h2>
-            <p>Escrow TARI once from your wallet. Each task then carries a voucher this page signs for what you've used; the router claims what it charged and you get the rest back when you close.</p>
+            <p>An Ootlebook lane from your agent's card to the router's, escrowed once from your wallet. Each task then carries a voucher this page signs, and after each one it signs another for exactly what was charged, which is what the router claims. You get the rest back when you close.</p>
             <div id="r-vk"></div>
-            <div class="or-row">${field("r-lane", "Lane number", s.lane ?? "", "number")}${field("r-limit", "Escrowed (µT)", s.limit ?? "", "number")}</div>
+            <div class="or-row">${field("r-lane", "Lane", s.lane ?? "", "text")}${field("r-limit", "Escrowed (µT)", s.limit ?? "", "number")}</div>
             <div><button class="or-btn small line" id="r-save">Check lane</button></div>
             <div id="r-lane-out"></div>
           </div>
@@ -98,9 +99,12 @@ export default function routerView(app, { esc }) {
   const step = (n, done) => $(`n${n}`).classList.toggle("done", done);
   let info = null;
 
+  const base = () => val("r-base").replace(/\/+$/, "");
+  const keyOf = () => (load().keys ?? {})[`${base()}|${val("r-lane")}`];
   async function call(path, init = {}) {
-    const res = await fetch(`${val("r-base").replace(/\/+$/, "")}${path}`, {
-      ...init, headers: { authorization: `Bearer ${val("r-key")}`, "content-type": "application/json", ...(init.headers ?? {}) },
+    const key = init.keyless ? null : keyOf();
+    const res = await fetch(`${base()}${path}`, {
+      ...init, headers: { ...(key ? { authorization: `Bearer ${key}` } : {}), "content-type": "application/json", ...(init.headers ?? {}) },
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(body.error?.message ?? body.detail ?? `HTTP ${res.status}`), { body });
@@ -115,16 +119,16 @@ export default function routerView(app, { esc }) {
       return;
     }
     const pub = publicKeyOf(st.voucherSecret);
-    const cmd = `ootlerouter-lanes open --account <your walletd account> ${info?.provider_key ?? "<router's provider key>"} <µT> ${pub} --live`;
+    const cmd = `node cli.mjs open --account <your walletd account> --name <your agent> ${info?.agent ?? "<the router's agent>"} <µT> ${pub} --live`;
     show("r-vk", `<pre class="or-cmd">${esc(cmd)}</pre><div><button class="or-btn small line copy" data-copy="${esc(cmd)}">Copy</button>
-      <a class="or-note" href="https://github.com/alex3000-ai/ootleRouter/tree/main/ootle">the CLI</a></div>`);
+      <a class="or-note" href="/skill.md">the Ootlebook CLI</a> · it prints the lane, e.g. <code>${esc(info?.agent ?? "router")}.0</code></div>`);
   }
 
   async function connect() {
-    save({ base: val("r-base"), apiKey: val("r-key") });
+    save({ base: val("r-base") });
     try {
-      info = await call("/v1/ootle");
-      show("r-info", `<dl class="or-kv"><dt>Network</dt><dd>${esc(info.network ?? "")}</dd><dt>Lanes</dt><dd class="mono">${esc(info.component.slice(0, 22))}…</dd><dt>Pays</dt><dd class="mono">${esc(info.provider_key.slice(0, 16))}…</dd></dl>`);
+      info = await call("/v1/ootle", { keyless: true });
+      show("r-info", `<dl class="or-kv"><dt>Network</dt><dd>${esc(info.network ?? "")}</dd><dt>Agent</dt><dd><a href="/agents/${esc(info.agent)}">${esc(info.agent)}</a></dd><dt>Ootlebook</dt><dd class="mono">${esc(info.ootlebook.slice(0, 22))}…</dd></dl>`);
       show("r-prices", `<dl class="or-kv">${Object.entries(info.prices).map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd>${v} µT</dd>`).join("")}
         <dt>reserve</dt><dd>${tari(info.reserve_microtari)}</dd></dl>`);
       step(1, true); step(3, true);
@@ -132,11 +136,23 @@ export default function routerView(app, { esc }) {
     showKey();
   }
 
+  /** A key of this lane's own, from the router, for a voucher that authorises nothing (0 µT): shown once, kept here. */
+  async function ensureKey() {
+    if (keyOf()) return;
+    const st = load(), lane = val("r-lane");
+    if (!st.voucherSecret || !lane) throw new Error("Make a voucher key and enter your lane first (step 2).");
+    const r = await call("/v1/ootle/keys", { method: "POST", keyless: true,
+      headers: { "x-ootle-voucher": JSON.stringify(signVoucher(st.voucherSecret, info.ootlebook, lane, 0, info.network)) } });
+    save({ keys: { ...(st.keys ?? {}), [`${base()}|${lane}`]: r.key } });
+  }
+
   async function laneStatus() {
-    const st = await call(`/v1/ootle/lanes/${Number(val("r-lane"))}`);
+    if (!info) await connect();
+    await ensureKey();
+    const st = await call(`/v1/ootle/lanes/${encodeURIComponent(val("r-lane"))}`);
     const left = Number(val("r-limit")) - st.charged - st.held;
     show("r-lane-out", `<dl class="or-kv"><dt>Charged</dt><dd>${tari(st.charged)}</dd><dt>Held</dt><dd>${tari(st.held)}</dd><dt>Vouchers</dt><dd>${tari(st.voucher_cum)}</dd><dt>Left</dt><dd><b>${tari(left)}</b></dd></dl>`);
-    show("r-bal", `<span class="or-chip acc">Lane ${Number(val("r-lane"))} · ${tari(left)} left</span>`);
+    show("r-bal", `<span class="or-chip acc">Lane ${esc(val("r-lane"))} · ${tari(left)} left</span>`);
     step(2, true);
     return st;
   }
@@ -174,19 +190,22 @@ export default function routerView(app, { esc }) {
       if (!info) throw new Error("Connect to the router first (step 1).");
       if (!st0.voucherSecret || val("r-lane") === "") throw new Error("Make a voucher key and enter your lane first (step 2).");
       if (!input.trim()) throw new Error("Say what the agent should do.");
-      const lane = Number(val("r-lane")), limit = Number(val("r-limit"));
+      const lane = val("r-lane"), limit = Number(val("r-limit"));
       // Sign only what this task can need: what's charged and held already, plus the reserve it will hold.
       const st = await laneStatus();
       const cum = Math.max(st.voucher_cum, st.charged + st.held + info.reserve_microtari);
       if (cum > limit) throw new Error(`This task needs a voucher for ${tari(cum)} in all, above the ${tari(limit)} in your lane. Fund the lane and raise "Escrowed".`);
-      const voucher = signVoucher(st0.voucherSecret, info.component, lane, cum, info.network);
+      const voucher = signVoucher(st0.voucherSecret, info.ootlebook, lane, cum, info.network);
       const r = await call("/v1/responses", {
         method: "POST",
         headers: { "x-ootle-voucher": JSON.stringify(voucher) },
         body: JSON.stringify({ input, model: val("r-model") || undefined, metadata: { harness_id: val("r-harness") }, stream: false }),
       });
       const text = r.output_text ?? (r.output ?? []).flatMap((o) => o.content ?? []).filter((c) => c.type === "output_text").map((c) => c.text).join("\n");
-      const after = await laneStatus();
+      let after = await laneStatus();
+      // Settle: a voucher for exactly what's been charged, which is what the router claims (not the reserve above it).
+      await call("/v1/ootle/vouchers", { method: "POST", headers: { "x-ootle-voucher": JSON.stringify(signVoucher(st0.voucherSecret, info.ootlebook, lane, after.charged, info.network)) } });
+      after = await laneStatus();
       const cost = after.charged - st.charged, ok = r.status === "completed";
       ran.unshift({ input, status: r.status, cost, ok, text: text || r.error?.message || "" });
       show("r-run-out", `<div class="or-result"><div class="or-result-head"><span class="or-chip ${ok ? "ok" : "bad"}">${esc(r.status)}</span>
@@ -199,5 +218,5 @@ export default function routerView(app, { esc }) {
   };
 
   showKey();
-  if (s.base && s.apiKey) connect().then(() => (s.lane !== undefined && s.lane !== "" ? laneStatus().catch(() => {}) : null));
+  if (s.base && !s.base.includes("…")) connect().then(() => (s.lane !== undefined && s.lane !== "" ? laneStatus().catch(() => {}) : null));
 }
